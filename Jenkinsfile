@@ -22,12 +22,8 @@ pipeline {
         buildDiscarder(logRotator(numToKeepStr: '20')) // keep only the last 20 builds
     }
 
-    // Provision Node.js 24 on PATH for every stage.
-    // PREREQUISITE: under Manage Jenkins -> Tools -> NodeJS installations,
-    // add an installation named exactly 'node-24' (requires the "NodeJS" plugin).
-    tools {
-        nodejs 'node-24'
-    }
+    // NOTE: no `tools` block — Node.js/npm are expected to be on the agent's
+    // PATH already (the Unit Test stage runs `node --version` to confirm).
 
     // Only the SSH/target deploy needs parameters. Leave TARGET_HOST empty to
     // skip that stage and still run the Docker + Kubernetes deploys.

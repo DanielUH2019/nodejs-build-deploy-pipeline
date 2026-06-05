@@ -45,10 +45,10 @@ Only the SSH/target deploy is parameterised — Docker and Kubernetes need none:
 
 ## Jenkins prerequisites
 
-On the agent's PATH: **Docker** (with `buildx`), **kubectl**, **ssh/scp/ssh-keyscan/curl**.
+On the agent's PATH: **Node.js + npm** (used by the Unit Test stage — no version
+pinned), **Docker** (with `buildx`), **kubectl**, **ssh/scp/ssh-keyscan/curl**.
 On the controller:
 
-- **NodeJS plugin** with a NodeJS installation named **`node-24`** (Manage Jenkins → Tools).
 - **Kubernetes CLI plugin** (provides `withKubeConfig`).
 - **Secret text** credential `jenkins-robot-token` — bearer token of the
   `default:jenkins-robot` ServiceAccount (manage Pods/Services in `default`).
