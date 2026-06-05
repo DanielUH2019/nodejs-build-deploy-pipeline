@@ -1,0 +1,33 @@
+# systemd service unit TEMPLATE for the MyApp Node.js HTTP service.
+#
+# Not used as-is. `scripts/remote-install.sh` renders it ON THE TARGET by
+# replacing the @@PLACEHOLDERS@@ below, then installs the result as
+#   /etc/systemd/system/<SERVICE_NAME>.service
+#
+# Placeholders:
+#   @@SERVICE_USER@@    -> unprivileged system user the process runs as
+#   @@REMOTE_APP_DIR@@  -> directory the app is installed into on the target
+#   @@NODE_BIN@@        -> absolute path to the node binary found on the target
+
+[Unit]
+Description=MyApp Node.js HTTP service
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=@@SERVICE_USER@@
+WorkingDirectory=@@REMOTE_APP_DIR@@
+ExecStart=@@NODE_BIN@@ @@REMOTE_APP_DIR@@/index.js
+Environment=NODE_ENV=production
+# Crash recovery: restart the process if it exits non-zero.
+Restart=on-failure
+RestartSec=2
+# --- Sandboxing / least privilege ---
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectHome=true
+ProtectSystem=full
+
+[Install]
+WantedBy=multi-user.target

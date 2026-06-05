@@ -3,19 +3,25 @@
 Build and deployment pipeline for a small Node.js (Express) service — the final
 exam for the Harbour.Space **CS411 DevOps** course.
 
-A Jenkins declarative pipeline runs a unit-test stage, builds a Docker image, and
-deploys the app to both the **docker** and **kubernetes** targets.
+A single Jenkins declarative pipeline runs a unit-test stage and then deploys the
+app to **three targets**:
+
+| Target | How | Reference branch |
+|--------|-----|------------------|
+| **target** (SSH) | Copy sources over SSH, run as a `systemd` service | `first-deployment-pipeline` |
+| **docker** | Build + push to ttl.sh, then `docker run` | `challenge_3` |
+| **kubernetes** | `kubectl apply` against `https://kubernetes:6443` | `deploy-to-kubernetes` |
 
 ## The app
 
-`index.js` is a one-endpoint Express service listening on port **4444**:
+`index.js` is a one-endpoint Express service on port **4444**:
 
 ```bash
 curl localhost:4444
 # {"name":"Hello","description":"World","url":"localhost:4444"}
 ```
 
-`index.test.js` is the unit test, using the built-in `node:test` runner.
+`index.test.js` is the unit test (built-in `node:test` runner).
 
 ## Pipeline (`Jenkinsfile`)
 
@@ -23,21 +29,32 @@ curl localhost:4444
 |-------|--------------|
 | **Checkout** | Fetch the source. |
 | **Unit Test** | `npm install` then `npm test` (`node --test`). |
-| **Docker Build and Push** | `docker buildx build --platform linux/amd64 -t ttl.sh/danieluh2019-node:2h --push .` — the **docker** target (ephemeral [ttl.sh](https://ttl.sh) registry, no credentials). |
-| **Deploy to Kubernetes** | `kubectl apply -f pod.yaml -f service.yaml` against `https://kubernetes:6443` via the Kubernetes CLI plugin — the **kubernetes** target. |
+| **Deploy to Target (SSH)** | `scripts/deploy.sh` → systemd service on `TARGET_HOST`, then `scripts/health-check.sh`. Skipped if `TARGET_HOST` is empty. |
+| **Docker Build and Push** | `docker buildx build ... -t ttl.sh/danieluh2019-node:2h --push .` |
+| **Deploy to Docker** | `docker run -p 4444:4444 ...`, then wait for the container `HEALTHCHECK` to report healthy. |
+| **Deploy to Kubernetes** | `kubectl apply -f pod.yaml -f service.yaml` via the Kubernetes CLI plugin. |
 
-The pipeline uses whatever Node.js is on the agent's PATH (no version pinning);
-Node 24 is not a hard requirement.
+## Build parameters
+
+Only the SSH/target deploy is parameterised — Docker and Kubernetes need none:
+
+| Parameter | Default | Meaning |
+|-----------|---------|---------|
+| `TARGET_HOST` | *(empty)* | SSH host for the systemd deploy. **Leave empty to skip** that stage and run only Docker + Kubernetes. |
+| `SSH_CREDENTIALS_ID` | `target-ssh-key` | Jenkins "SSH Username with private key" credential ID. |
 
 ## Jenkins prerequisites
 
-The agent must have on its PATH: **Node.js + npm**, **Docker** (with `buildx`),
-and **kubectl**. The controller needs:
+On the agent's PATH: **Docker** (with `buildx`), **kubectl**, **ssh/scp/ssh-keyscan/curl**.
+On the controller:
 
-- The **Kubernetes CLI** plugin (provides `withKubeConfig`).
-- A **Secret text** credential with ID `jenkins-robot-token` holding the bearer
-  token of the `default:jenkins-robot` ServiceAccount, with permission to manage
-  Pods/Services in the `default` namespace.
+- **NodeJS plugin** with a NodeJS installation named **`node-24`** (Manage Jenkins → Tools).
+- **Kubernetes CLI plugin** (provides `withKubeConfig`).
+- **Secret text** credential `jenkins-robot-token` — bearer token of the
+  `default:jenkins-robot` ServiceAccount (manage Pods/Services in `default`).
+- For the SSH deploy: an **SSH Username with private key** credential
+  (default ID `target-ssh-key`); the target needs Node.js + passwordless sudo
+  (see [`scripts/README.md`](scripts/README.md)).
 
 ## Run locally (without Jenkins)
 
