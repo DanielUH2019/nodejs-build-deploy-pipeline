@@ -73,6 +73,21 @@ pipeline {
         // --- Run the node:test unit suite -----------------------------------
         stage('Unit Test') {
             steps {
+                // index.test.js does `require('./index')`, and index.js calls
+                // app.listen(4444) at import time — so `npm test` binds 4444 on
+                // THIS agent. A previous build's Docker deploy keeps a container
+                // bound to 4444 (--restart unless-stopped), which survives into
+                // this build and would make the test crash with EADDRINUSE.
+                // Free the port first: drop the old container and any process on it.
+                sh '''#!/usr/bin/env bash
+                    docker rm -f ${CONTAINER} >/dev/null 2>&1 || true
+                    holders="$(docker ps -aq --filter "publish=${APP_PORT}" 2>/dev/null || true)"
+                    [ -n "$holders" ] && docker rm -f $holders >/dev/null 2>&1 || true
+                    if command -v fuser >/dev/null 2>&1; then
+                        fuser -k "${APP_PORT}/tcp" >/dev/null 2>&1 || true
+                    fi
+                    exit 0
+                '''
                 sh 'node --version'
                 sh 'npm install'
                 sh 'npm test'
@@ -108,7 +123,15 @@ pipeline {
         // ===== Target 2: Docker (challenge_3) ===============================
         stage('Deploy to Docker') {
             steps {
-                sh 'docker rm -f ${CONTAINER} || true'
+                // Free port ${APP_PORT}: remove the previous container plus any
+                // other container still publishing it, so `docker run -p` below
+                // can't fail with "port is already allocated".
+                sh '''#!/usr/bin/env bash
+                    docker rm -f ${CONTAINER} >/dev/null 2>&1 || true
+                    holders="$(docker ps -aq --filter "publish=${APP_PORT}" 2>/dev/null || true)"
+                    [ -n "$holders" ] && docker rm -f $holders >/dev/null 2>&1 || true
+                    exit 0
+                '''
                 sh 'docker pull ${IMAGE}'
                 sh 'docker run -d --name ${CONTAINER} --restart unless-stopped -p ${APP_PORT}:${APP_PORT} ${IMAGE}'
                 sh '''#!/usr/bin/env bash
